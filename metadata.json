@@ -1,0 +1,6 @@
+{
+  "name": "StudyIG CTO",
+  "description": "An AI Coding Assistant and Project Manager built with Express, TypeScript, Gemini, Supabase, Telegram, and GitHub.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
