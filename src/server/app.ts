@@ -5,7 +5,6 @@
 
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { apiRouter } from "./routes/api.js";
 import { requestLogger } from "./middleware/loggerMiddleware.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -27,6 +26,7 @@ export async function createApp() {
   if (process.env.NODE_ENV !== "production") {
     logger.info("Initializing Vite bundler in DEVELOPMENT middleware mode...");
     
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
