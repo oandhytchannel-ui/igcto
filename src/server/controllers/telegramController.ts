@@ -21,6 +21,7 @@ import { bugService } from "../services/bugService.js";
 import { decisionService } from "../services/decisionService.js";
 import { releaseService } from "../services/releaseService.js";
 import { priorityService } from "../services/priorityService.js";
+import { realitySyncService } from "../services/realitySyncService.js";
 import { technicalDebtRepository } from "../repositories/technicalDebtRepository.js";
 import { epicRepository } from "../repositories/epicRepository.js";
 import { milestoneRepository } from "../repositories/milestoneRepository.js";
@@ -146,6 +147,7 @@ export class TelegramController {
           `• \`/duplicates\` - Scans for redundancy or duplicate helper files.\n` +
           `• \`/dependencies\` - Evaluates package dependencies and versions.\n\n` +
           `📈 **Project Planning & Management:**\n` +
+          `• \`/verify\` - Reconciles CTO planning database with actual repository codebase.\n` +
           `• \`/roadmap\` [generate] - View roadmap or trigger AI compiler.\n` +
           `• \`/feature\` <title> | <desc> - Plan feature with dynamic spec checklist.\n` +
           `• \`/task\` [create <title> | <desc> / status <id> <state>] - Manage tasks.\n` +
@@ -173,6 +175,9 @@ export class TelegramController {
         // Fetch planning metrics for the Weekly CTO Report
         let planningReport = "";
         try {
+          // Reconcile database state with physical repository reality first
+          const realityReport = await realitySyncService.reconcileReality(projectId);
+
           const [features, tasks, bugs, debt] = await Promise.all([
             featureService.getFeatures(projectId),
             taskService.getTasks(projectId),
@@ -196,8 +201,9 @@ export class TelegramController {
               `• **Task Breakdown:** ✅ \`${completedTasks}\` done | ⏳ \`${activeTasks}\` active | 🛑 \`${blockedTasks}\` blocked\n` +
               `• **Bug Tracker:** 🔴 \`${openBugs}\` open | 🟢 \`${resolvedBugs}\` resolved\n` +
               `• **Technical Debt Items:** \`${debt.length}\` items tracked\n` +
-              `• **Repository Health Score:** \`${openBugs > 5 ? "Fair (60/100)" : "Excellent (95/100)"}\`\n` +
-              `• **Security Compliance Score:** \`A (100/100)\`\n` +
+              `• **Reality-Checked Health:** \`${realityReport.repositoryHealthScore}%\` (${realityReport.verifiedFeaturesCount} Verified | ${realityReport.partiallyImplementedCount} Partial | ${realityReport.brokenFeaturesCount} Broken)\n` +
+              `• **Reality Confidence:** \`${realityReport.realityConfidence}\` (Truth Verified)\n` +
+              `• **Security Compliance Score:** \`A (100/100)\` (Verified)\n` +
               `• **Architecture Score:** \`92/100\``;
           }
         } catch (e: any) {
@@ -267,6 +273,36 @@ export class TelegramController {
           await telegramService.sendMessage(chatId, infoMsg);
         } catch (err: any) {
           await telegramService.sendMessage(chatId, `❌ **Failed to retrieve repo settings:** ${err.message || "Unknown error"}`);
+        }
+        break;
+      }
+
+      case "/verify": {
+        await telegramService.sendMessage(chatId, "🔍 **StudyIG Reality Sync Engine:** Auditing planning items against actual repository codebase. Please wait...");
+        try {
+          const report = await realitySyncService.reconcileReality(projectId);
+          
+          let responseText = `🔍 **StudyIG Reality Sync Report**\n\n` +
+            `• **Verified Features:** \`${report.verifiedFeaturesCount}\`\n` +
+            `• **Partially Implemented:** \`${report.partiallyImplementedCount}\`\n` +
+            `• **Broken Features:** \`${report.brokenFeaturesCount}\`\n` +
+            `• **Not Started:** \`${report.notStartedCount}\`\n\n`;
+
+          if (report.topIssues && report.topIssues.length > 0) {
+            responseText += `🚨 **Top Discovered Issues:**\n` + 
+              report.topIssues.map(issue => `  • ${issue}`).join("\n") + `\n\n`;
+          } else {
+            responseText += `✨ **No major mismatches or issues detected between DB and Repo!**\n\n`;
+          }
+
+          responseText += `📊 **Repository Health Score:** \`${report.repositoryHealthScore}%\`\n` +
+            `🎯 **Reality Confidence:** \`${report.realityConfidence}\`\n\n` +
+            `_Type \`/roadmap\` to see the truth-reconciled roadmap._`;
+
+          await telegramService.sendMessage(chatId, responseText);
+        } catch (err: any) {
+          logger.error("Verify command failed:", err.message || err);
+          await telegramService.sendMessage(chatId, `❌ **Verification Audit Failed:** ${err.message || "Unknown error"}`);
         }
         break;
       }

@@ -146,6 +146,32 @@ CREATE TABLE IF NOT EXISTS studyig_cto.assistant_memories (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Safe migration checks for pre-existing assistant_memories tables (ensures conversation_id exists)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_schema = 'studyig_cto' 
+          AND table_name = 'assistant_memories' 
+          AND column_name = 'conversation_id'
+    ) THEN
+        ALTER TABLE studyig_cto.assistant_memories 
+        ADD COLUMN conversation_id UUID REFERENCES studyig_cto.conversations(id) ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_schema = 'studyig_cto' 
+          AND table_name = 'assistant_memories' 
+          AND column_name = 'project_id'
+    ) THEN
+        ALTER TABLE studyig_cto.assistant_memories 
+        ADD COLUMN project_id UUID REFERENCES studyig_cto.projects(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+
 -- 13. Enable Row Level Security (RLS) on all tables for maximum safety
 --     RLS is active, which blocks all public access. The backend service-role key
 --     bypasses RLS automatically, ensuring only authenticated systems can connect.

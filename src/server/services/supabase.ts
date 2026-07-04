@@ -16,9 +16,11 @@ export type {
   ArchitecturalDecision,
   SystemPrompt,
   Conversation,
-  RepoFile
+  RepoFile,
+  RealityCheck
 } from "../repositories/projectRepository.js";
 export { projectRepository } from "../repositories/projectRepository.js";
+export { realityCheckRepository } from "../repositories/realityCheckRepository.js";
 
 export function isSupabaseAvailable(): boolean {
   return isSupabaseConfigured();

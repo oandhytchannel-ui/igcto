@@ -3,6 +3,7 @@ import { bugReportRepository } from "../repositories/bugReportRepository.js";
 import { technicalDebtRepository } from "../repositories/technicalDebtRepository.js";
 import { geminiProvider } from "./geminiProvider.js";
 import { logger } from "../lib/logger.js";
+import { realitySyncService } from "./realitySyncService.js";
 
 export interface PriorityItem {
   type: "bug" | "feature" | "technical_debt";
@@ -16,6 +17,9 @@ export class PriorityService {
   async calculatePriorityPlan(projectId: string): Promise<PriorityItem[]> {
     logger.info("Gathering project metadata to calculate prioritisations...");
     try {
+      // Reconcile database state with physical repository reality first
+      await realitySyncService.reconcileReality(projectId);
+
       const [features, bugs, debt] = await Promise.all([
         featureRepository.getFeaturesByProject(projectId),
         bugReportRepository.getBugReportsByProject(projectId),

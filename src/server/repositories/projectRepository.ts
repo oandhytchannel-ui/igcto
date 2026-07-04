@@ -245,6 +245,19 @@ export interface Release {
   updatedAt?: string;
 }
 
+export interface RealityCheck {
+  id?: string;
+  projectId: string;
+  featureId?: string;
+  repositorySnapshot: Record<string, any>;
+  verificationStatus: "not_started" | "in_progress" | "implemented" | "verified" | "broken";
+  repositoryFiles: string[];
+  mismatchReport: Record<string, any>;
+  verifiedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // --- Repository Implementation ---
 
 export class ProjectRepository {

@@ -31,7 +31,7 @@ export const config: AppConfig = {
   supabaseSchema: process.env.SUPABASE_SCHEMA || "studyig_cto",
   hasTelegramToken: !!process.env.TELEGRAM_BOT_TOKEN,
   hasGithubToken: !!process.env.GITHUB_TOKEN,
-  appUrl: process.env.APP_URL || "http://localhost:3000",
+  appUrl: process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"),
 };
 
 /**

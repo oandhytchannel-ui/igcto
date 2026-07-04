@@ -19,18 +19,8 @@ async function startServer() {
     logger.info(`🤖 StudyIG CTO server initialized successfully!`);
     logger.info(`📡 Access URI: http://localhost:${config.port}`);
     logger.info(`🌍 Running Mode: ${config.nodeEnv}`);
+    logger.info(`📝 Note: Telegram Webhook registration is moved to the /api/telegram/register endpoint or npm run register-webhook script.`);
     logger.info(`====================================================`);
-
-    // Register Telegram Bot Webhook
-    if (telegramService.isConfigured()) {
-      try {
-        await telegramService.registerWebhook();
-      } catch (err: any) {
-        logger.error("Failed to execute automatic Telegram Webhook registration:", err.message || err);
-      }
-    } else {
-      logger.warn("Skipping Webhook setup: TELEGRAM_BOT_TOKEN is not configured in the environment.");
-    }
   });
 }
 

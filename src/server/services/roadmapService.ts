@@ -5,6 +5,7 @@ import { technicalDebtRepository } from "../repositories/technicalDebtRepository
 import { projectRepository, RoadmapItem } from "../repositories/projectRepository.js";
 import { geminiProvider } from "./geminiProvider.js";
 import { logger } from "../lib/logger.js";
+import { realitySyncService } from "./realitySyncService.js";
 
 export class RoadmapService {
   async getRoadmap(projectId: string): Promise<RoadmapItem[]> {
@@ -14,6 +15,9 @@ export class RoadmapService {
   async generateRoadmapWithAI(projectId: string): Promise<RoadmapItem[]> {
     logger.info("Gathering project state to generate intelligent roadmap via Gemini...");
     try {
+      // Reconcile database state with physical repository reality first
+      await realitySyncService.reconcileReality(projectId);
+
       const [features, bugs, debt, filesResult] = await Promise.all([
         featureRepository.getFeaturesByProject(projectId),
         bugReportRepository.getBugReportsByProject(projectId),
