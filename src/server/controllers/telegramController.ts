@@ -180,64 +180,12 @@ export class TelegramController {
       }
 
       case "/status": {
-        const report = getDiagnosticsReport();
-        const geminiStatus = report.services.gemini.status === "configured" ? "🟢 Configured" : "🔴 Missing Key";
-        const supabaseStatus = report.services.supabase.status === "configured" ? "🟢 Configured" : "🔴 Missing Key";
-        const telegramStatus = report.services.telegram.status === "configured" ? "🟢 Configured" : "🔴 Missing Key";
-        const githubStatus = report.services.github.status === "configured" ? "🟢 Configured" : "🔴 Missing Key";
-
-        // Fetch planning metrics for the Weekly CTO Report
-        let planningReport = "";
         try {
-          // Reconcile database state with physical repository reality first
-          const realityReport = await realitySyncService.reconcileReality(projectId);
-
-          const [features, tasks, bugs, debt] = await Promise.all([
-            featureService.getFeatures(projectId),
-            taskService.getTasks(projectId),
-            bugService.getBugs(projectId),
-            technicalDebtRepository.getTechnicalDebtByProject(projectId)
-          ]);
-
-          if (features.length > 0 || tasks.length > 0 || bugs.length > 0 || debt.length > 0) {
-            const completedFeatures = features.filter(f => f.status === "completed").length;
-            const completedTasks = tasks.filter(t => t.status === "done").length;
-            const activeTasks = tasks.filter(t => t.status === "in_progress").length;
-            const blockedTasks = tasks.filter(t => t.status === "backlog").length;
-            const openBugs = bugs.filter(b => b.status === "open" || b.status === "investigating").length;
-            const resolvedBugs = bugs.filter(b => b.status === "resolved" || b.status === "closed").length;
-
-            const totalFeatures = features.length;
-            const completionPct = totalFeatures > 0 ? Math.round((completedFeatures / totalFeatures) * 100) : 0;
-
-            planningReport = `\n\n📈 **StudyIG CTO - Weekly Project Dashboard**\n` +
-              `• **Overall Feature Completion:** \`${completionPct}%\` (${completedFeatures}/${totalFeatures} completed)\n` +
-              `• **Task Breakdown:** ✅ \`${completedTasks}\` done | ⏳ \`${activeTasks}\` active | 🛑 \`${blockedTasks}\` blocked\n` +
-              `• **Bug Tracker:** 🔴 \`${openBugs}\` open | 🟢 \`${resolvedBugs}\` resolved\n` +
-              `• **Technical Debt Items:** \`${debt.length}\` items tracked\n` +
-              `• **Reality-Checked Health:** \`${realityReport.repositoryHealthScore}%\` (${realityReport.verifiedFeaturesCount} Verified | ${realityReport.partiallyImplementedCount} Partial | ${realityReport.brokenFeaturesCount} Broken)\n` +
-              `• **Reality Confidence:** \`${realityReport.realityConfidence}\` (Truth Verified)\n` +
-              `• **Security Compliance Score:** \`A (100/100)\` (Verified)\n` +
-              `• **Architecture Score:** \`92/100\``;
-          }
-        } catch (e: any) {
-          logger.warn("Failed to generate project metrics for status report:", e.message);
+          const reportText = await intentRouterService.executeInspection("status", projectId);
+          await telegramService.sendMessage(chatId, reportText);
+        } catch (err: any) {
+          await telegramService.sendMessage(chatId, `❌ **Status Failed:** ${err.message || "Unknown error"}`);
         }
-
-        const statusText = `📊 **StudyIG CTO - Live Integration Status**\n\n` +
-          `🕒 **System Time:** \`${report.timestamp}\`\n` +
-          `🌐 **Environment:** \`${report.environment}\`\n\n` +
-          `🧩 **Services Status:**\n` +
-          `• 🧠 **Gemini API:** ${geminiStatus}\n` +
-          `  _Abstraction Provider: @google/genai_\n` +
-          `• 🗄️ **Supabase Database:** ${supabaseStatus}\n` +
-          `  _Schema: ${report.services.supabase.status === "configured" ? "studyig_cto" : "N/A"}_\n` +
-          `• 🤖 **Telegram Bot:** ${telegramStatus}\n` +
-          `  _Routing: Webhook Delivery Active_\n` +
-          `• 🐙 **GitHub Connector:** ${githubStatus}\n` +
-          `  _Read-Only Codebase Parser_${planningReport}`;
-
-        await telegramService.sendMessage(chatId, statusText);
         break;
       }
 
@@ -294,26 +242,8 @@ export class TelegramController {
       case "/verify": {
         await telegramService.sendMessage(chatId, "🔍 Starting a codebase integrity and import verification...");
         try {
-          const report = await realitySyncService.reconcileReality(projectId);
-          
-          let responseText = `🔍 **StudyIG Reality Sync Report**\n\n` +
-            `• **Verified Features:** \`${report.verifiedFeaturesCount}\`\n` +
-            `• **Partially Implemented:** \`${report.partiallyImplementedCount}\`\n` +
-            `• **Broken Features:** \`${report.brokenFeaturesCount}\`\n` +
-            `• **Not Started:** \`${report.notStartedCount}\`\n\n`;
-
-          if (report.topIssues && report.topIssues.length > 0) {
-            responseText += `🚨 **Top Discovered Issues:**\n` + 
-              report.topIssues.map(issue => `  • ${issue}`).join("\n") + `\n\n`;
-          } else {
-            responseText += `✨ **No major mismatches or issues detected between DB and Repo!**\n\n`;
-          }
-
-          responseText += `📊 **Repository Health Score:** \`${report.repositoryHealthScore}%\`\n` +
-            `🎯 **Reality Confidence:** \`${report.realityConfidence}\`\n\n` +
-            `_Type \`/roadmap\` to see the truth-reconciled roadmap._`;
-
-          await telegramService.sendMessage(chatId, responseText);
+          const reportText = await intentRouterService.executeInspection("verify", projectId);
+          await telegramService.sendMessage(chatId, reportText);
         } catch (err: any) {
           logger.error("Verify command failed:", err.message || err);
           await telegramService.sendMessage(chatId, `❌ **Verification Audit Failed:** ${err.message || "Unknown error"}`);
@@ -329,26 +259,8 @@ export class TelegramController {
 
         await telegramService.sendMessage(chatId, `🔍 Searching codebase for term: \`${commandArg}\`...`);
         try {
-          const matches = await repoIntelligenceService.searchCodebase(commandArg);
-          if (matches.length === 0) {
-            await telegramService.sendMessage(chatId, `🤷 No matches found for query: \`${commandArg}\``);
-            break;
-          }
-
-          let responseText = `🔎 **Codebase Search Results (${matches.length} files matched):**\n\n`;
-          for (const match of matches) {
-            responseText += `📁 **File:** \`${match.path}\`\n`;
-            for (const line of match.lineMatches) {
-              if (line.line === 0) {
-                responseText += `  • _${line.text}_\n`;
-              } else {
-                responseText += `  • \`Line ${line.line}:\` \`${line.text}\`\n`;
-              }
-            }
-            responseText += `\n`;
-          }
-
-          await telegramService.sendMessage(chatId, responseText);
+          const reportText = await intentRouterService.executeInspection("search", projectId, commandArg);
+          await telegramService.sendMessage(chatId, reportText);
         } catch (err: any) {
           await telegramService.sendMessage(chatId, `❌ **Search Failed:** ${err.message || "Unknown error"}`);
         }
@@ -363,24 +275,8 @@ export class TelegramController {
 
         await telegramService.sendMessage(chatId, `📂 Reading file content: \`${commandArg}\`...`);
         try {
-          const content = await repoIntelligenceService.getFileContent(commandArg);
-          const ext = commandArg.split(".").pop() || "txt";
-          
-          let formattedContent = content;
-          let notice = "";
-          
-          if (content.length > 2000) {
-            formattedContent = content.slice(0, 2000);
-            notice = `\n\n⚠️ _Content truncated to first 2000 characters to stay within message size limits. Original size: ${content.length} characters._`;
-          }
-
-          const fileMsg = `📄 **File Content: \`${commandArg}\`**\n\n` +
-            `\`\`\`${ext}\n` +
-            `${formattedContent}\n` +
-            `\`\`\`` +
-            notice;
-
-          await telegramService.sendMessage(chatId, fileMsg);
+          const reportText = await intentRouterService.executeInspection("file", projectId, commandArg);
+          await telegramService.sendMessage(chatId, reportText);
         } catch (err: any) {
           logger.error(`File command failed for path ${commandArg}:`, err.message || err);
           await telegramService.sendMessage(chatId, `❌ **File Read Failed:** ${err.message || "Could not find or fetch the file. Check path spelling."}`);
@@ -396,8 +292,8 @@ export class TelegramController {
 
         await telegramService.sendMessage(chatId, `🧠 **StudyIG CTO:** Formulating architectural explanation for: \`${commandArg}\`...`);
         try {
-          const explanation = await repoIntelligenceService.explainTopic(commandArg);
-          await telegramService.sendMessage(chatId, explanation);
+          const reportText = await intentRouterService.executeInspection("explain", projectId, commandArg);
+          await telegramService.sendMessage(chatId, reportText);
         } catch (err: any) {
           await telegramService.sendMessage(chatId, `❌ **Explanation Failed:** ${err.message || "Unknown error"}`);
         }
@@ -407,8 +303,8 @@ export class TelegramController {
       case "/architecture": {
         await telegramService.sendMessage(chatId, "🔍 Starting a system architecture mapping...");
         try {
-          const analysis = await repoIntelligenceService.analyzeArchitecture();
-          await telegramService.sendMessage(chatId, analysis);
+          const reportText = await intentRouterService.executeInspection("architecture", projectId);
+          await telegramService.sendMessage(chatId, reportText);
         } catch (err: any) {
           await telegramService.sendMessage(chatId, `❌ **Architecture Analysis Failed:** ${err.message || "Unknown error"}`);
         }
@@ -418,8 +314,8 @@ export class TelegramController {
       case "/review": {
         await telegramService.sendMessage(chatId, "🔍 Starting a code quality and style compliance check...");
         try {
-          const analysis = await repoIntelligenceService.reviewCodebase();
-          await telegramService.sendMessage(chatId, analysis);
+          const reportText = await intentRouterService.executeInspection("review", projectId);
+          await telegramService.sendMessage(chatId, reportText);
         } catch (err: any) {
           await telegramService.sendMessage(chatId, `❌ **Code Review Failed:** ${err.message || "Unknown error"}`);
         }
@@ -429,8 +325,8 @@ export class TelegramController {
       case "/security": {
         await telegramService.sendMessage(chatId, "🔍 Starting a full security audit...");
         try {
-          const analysis = await repoIntelligenceService.analyzeSecurity();
-          await telegramService.sendMessage(chatId, analysis);
+          const reportText = await intentRouterService.executeInspection("security", projectId);
+          await telegramService.sendMessage(chatId, reportText);
         } catch (err: any) {
           await telegramService.sendMessage(chatId, `❌ **Security Audit Failed:** ${err.message || "Unknown error"}`);
         }
@@ -440,8 +336,8 @@ export class TelegramController {
       case "/duplicates": {
         await telegramService.sendMessage(chatId, "🔍 Starting a duplicate file and codebase redundancy audit...");
         try {
-          const analysis = await repoIntelligenceService.analyzeDuplicates();
-          await telegramService.sendMessage(chatId, analysis);
+          const reportText = await intentRouterService.executeInspection("duplicates", projectId);
+          await telegramService.sendMessage(chatId, reportText);
         } catch (err: any) {
           await telegramService.sendMessage(chatId, `❌ **Duplicates Audit Failed:** ${err.message || "Unknown error"}`);
         }
@@ -451,8 +347,8 @@ export class TelegramController {
       case "/dependencies": {
         await telegramService.sendMessage(chatId, "🔍 Starting a package dependency and version check...");
         try {
-          const analysis = await repoIntelligenceService.analyzeDependencies();
-          await telegramService.sendMessage(chatId, analysis);
+          const reportText = await intentRouterService.executeInspection("dependencies", projectId);
+          await telegramService.sendMessage(chatId, reportText);
         } catch (err: any) {
           await telegramService.sendMessage(chatId, `❌ **Dependency Audit Failed:** ${err.message || "Unknown error"}`);
         }
@@ -464,40 +360,40 @@ export class TelegramController {
         if (subCommand === "schema") {
           await telegramService.sendMessage(chatId, "🔍 Generating professional StudyIG Database Schema & Relationships Map...");
           try {
-            const report = await studyigDbService.generateSchemaReport();
-            await telegramService.sendMessage(chatId, report);
+            const reportText = await intentRouterService.executeInspection("studyig-schema", projectId);
+            await telegramService.sendMessage(chatId, reportText);
           } catch (err: any) {
             await telegramService.sendMessage(chatId, `❌ **Database Schema Mapping Failed:** ${err.message || "Unknown error"}`);
           }
         } else if (subCommand === "db") {
           await telegramService.sendMessage(chatId, "🔍 Diagnostics started. Auditing StudyIG database health & connection parameters...");
           try {
-            const report = await studyigDbService.generateHealthReport();
-            await telegramService.sendMessage(chatId, report);
+            const reportText = await intentRouterService.executeInspection("studyig-db", projectId);
+            await telegramService.sendMessage(chatId, reportText);
           } catch (err: any) {
             await telegramService.sendMessage(chatId, `❌ **Database Health Audit Failed:** ${err.message || "Unknown error"}`);
           }
         } else if (subCommand === "rls") {
           await telegramService.sendMessage(chatId, "🔍 Initiating thorough Row Level Security (RLS) security compliance audit...");
           try {
-            const report = await studyigDbService.generateRlsAudit();
-            await telegramService.sendMessage(chatId, report);
+            const reportText = await intentRouterService.executeInspection("studyig-rls", projectId);
+            await telegramService.sendMessage(chatId, reportText);
           } catch (err: any) {
             await telegramService.sendMessage(chatId, `❌ **RLS Security Audit Failed:** ${err.message || "Unknown error"}`);
           }
         } else if (subCommand === "audit") {
           await telegramService.sendMessage(chatId, "🔍 Compiling complete alignment audit (codebase queries vs database schema)...");
           try {
-            const report = await studyigDbService.generateEngineeringAudit();
-            await telegramService.sendMessage(chatId, report);
+            const reportText = await intentRouterService.executeInspection("studyig-audit", projectId);
+            await telegramService.sendMessage(chatId, reportText);
           } catch (err: any) {
             await telegramService.sendMessage(chatId, `❌ **Engineering Audit Failed:** ${err.message || "Unknown error"}`);
           }
         } else if (subCommand === "sql") {
           await telegramService.sendMessage(chatId, "🔍 Compiling idempotent SQL fixes migration script...");
           try {
-            const report = await studyigDbService.generateSqlFixes();
-            await telegramService.sendMessage(chatId, report);
+            const reportText = await intentRouterService.executeInspection("studyig-sql", projectId);
+            await telegramService.sendMessage(chatId, reportText);
           } catch (err: any) {
             await telegramService.sendMessage(chatId, `❌ **SQL Fixes Generation Failed:** ${err.message || "Unknown error"}`);
           }
@@ -516,29 +412,15 @@ export class TelegramController {
         if (commandArg.toLowerCase() === "generate") {
           await telegramService.sendMessage(chatId, "🗺️ **StudyIG CTO:** Analyzing codebase, backlog, and architecture to build an optimized project roadmap...");
           try {
-            const roadmap = await roadmapService.generateRoadmapWithAI(projectId);
-            let msg = `🗺️ **Stunning AI-Generated Roadmap:**\n\n`;
-            for (const item of roadmap) {
-              const statusSymbol = item.status === "complete" ? "🟢" : item.status === "in_progress" ? "🟡" : "⚪";
-              msg += `${statusSymbol} **Phase ${item.orderIndex}: ${item.title}**\n${item.description}\n\n`;
-            }
-            await telegramService.sendMessage(chatId, msg);
+            const reportText = await intentRouterService.executeInspection("roadmap", projectId, "generate");
+            await telegramService.sendMessage(chatId, reportText);
           } catch (err: any) {
             await telegramService.sendMessage(chatId, `❌ **Roadmap Generation Failed:** ${err.message || "Unknown error"}`);
           }
         } else {
           try {
-            const roadmap = await roadmapService.getRoadmap(projectId);
-            if (roadmap.length === 0) {
-              await telegramService.sendMessage(chatId, "⚪ **No active roadmap found.**\n\n_Type \`/roadmap generate\` to trigger Gemini and construct an automated release roadmap!_");
-            } else {
-              let msg = `🗺️ **Current StudyIG Project Roadmap:**\n\n`;
-              for (const item of roadmap) {
-                const statusSymbol = item.status === "complete" ? "🟢" : item.status === "in_progress" ? "🟡" : "⚪";
-                msg += `${statusSymbol} **Phase ${item.orderIndex}: ${item.title}**\n${item.description}\n\n`;
-              }
-              await telegramService.sendMessage(chatId, msg);
-            }
+            const reportText = await intentRouterService.executeInspection("roadmap", projectId);
+            await telegramService.sendMessage(chatId, reportText);
           } catch (err: any) {
             await telegramService.sendMessage(chatId, `❌ **Failed to retrieve roadmap:** ${err.message || "Unknown error"}`);
           }
@@ -734,19 +616,8 @@ export class TelegramController {
       case "/priority": {
         await telegramService.sendMessage(chatId, "⚖️ **StudyIG CTO:** Running priority engine. Analyzing roadmap, severity, tech stack, and backlog to rank priorities...");
         try {
-          const plan = await priorityService.calculatePriorityPlan(projectId);
-          if (plan.length === 0) {
-            await telegramService.sendMessage(chatId, "⚪ **No items backlogged to prioritize.** Add some features with `/feature` or bugs with `/bug`!");
-          } else {
-            let msg = `⚖️ **StudyIG CTO Calculated Development Plan:**\n\n`;
-            for (let i = 0; i < plan.length; i++) {
-              const item = plan[i];
-              const typeIcon = item.type === "bug" ? "🐛" : item.type === "feature" ? "✨" : "🛠️";
-              const priorityIcon = item.calculatedPriority === "critical" ? "🚨" : item.calculatedPriority === "high" ? "🟠" : "🟡";
-              msg += `${i + 1}. ${priorityIcon} [${item.calculatedPriority.toUpperCase()}] ${typeIcon} **${item.title}**\n  • **Reason:** ${item.reason}\n\n`;
-            }
-            await telegramService.sendMessage(chatId, msg);
-          }
+          const reportText = await intentRouterService.executeInspection("priority", projectId);
+          await telegramService.sendMessage(chatId, reportText);
         } catch (err: any) {
           await telegramService.sendMessage(chatId, `❌ **Priority Engine Failed:** ${err.message || "Unknown error"}`);
         }
@@ -865,19 +736,8 @@ export class TelegramController {
 
       case "/todo": {
         try {
-          const tasks = await taskService.getTasks(projectId);
-          const activeTasks = tasks.filter(t => t.status !== "done");
-
-          if (activeTasks.length === 0) {
-            await telegramService.sendMessage(chatId, "🎉 **Perfect! No active or incomplete tasks in your queue.** All clear!");
-          } else {
-            let msg = `📝 **StudyIG Outstanding Developer To-Do List:**\n\n`;
-            for (const t of activeTasks) {
-              const statusSymbol = t.status === "in_progress" ? "🟡" : "⚪";
-              msg += `${statusSymbol} **${t.title}**\n  • ID: \`${t.id}\` | Status: \`${t.status}\` | Priority: \`${t.priority}\`\n`;
-            }
-            await telegramService.sendMessage(chatId, msg);
-          }
+          const reportText = await intentRouterService.executeInspection("todo", projectId);
+          await telegramService.sendMessage(chatId, reportText);
         } catch (err: any) {
           await telegramService.sendMessage(chatId, `❌ **Failed to list to-dos:** ${err.message || "Unknown error"}`);
         }
