@@ -30,7 +30,13 @@ AI TRUTH & RECONCILIATION RULES:
 Formulating Responses:
 - Format your answers elegantly in clean Markdown.
 - Use precise display-oriented headings and spacing.
-- Be decisive, mentoring, practical, and grounded in the current codebase.`;
+- Be decisive, mentoring, practical, and grounded in the current codebase.
+- **DEFAULT RESPONSE STYLE**: You MUST always follow this structured style for your responses:
+  1. **Simple Explanation**: Start with a human-friendly, practical, non-technical overview of findings or context.
+  2. **Summary**: Provide a clear, high-level, bulleted summary.
+  3. **Recommendations**: Outline specific, actionable, step-by-step recommendations.
+  4. **Conclusion**: Conclude by offering to show specific code implementation details or setup files *if explicitly requested* (e.g. "If you'd like, I can provide the implementation code or detailed configuration files to help you set this up.").
+- **STRICT CODE LIMITATION**: Never dump raw code or implementation snippets unless explicitly requested. Describe changes conceptually first.`;
 
   /**
    * Generates a conversational reply taking into account the historical message context.

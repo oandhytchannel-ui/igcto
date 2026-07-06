@@ -239,7 +239,7 @@ export class TelegramController {
       }
 
       case "/scan": {
-        await telegramService.sendMessage(chatId, "🔍 **StudyIG CTO:** Initiating recursive repository scan. Please wait...");
+        await telegramService.sendMessage(chatId, "🔍 Starting a full repository scan...");
         try {
           const force = commandArg.toLowerCase() === "force";
           const result = await repoIntelligenceService.scanRepository(force);
@@ -278,7 +278,7 @@ export class TelegramController {
       }
 
       case "/verify": {
-        await telegramService.sendMessage(chatId, "🔍 **StudyIG Reality Sync Engine:** Auditing planning items against actual repository codebase. Please wait...");
+        await telegramService.sendMessage(chatId, "🔍 Starting a codebase integrity and import verification...");
         try {
           const report = await realitySyncService.reconcileReality(projectId);
           
@@ -391,7 +391,7 @@ export class TelegramController {
       }
 
       case "/architecture": {
-        await telegramService.sendMessage(chatId, "🏗️ **StudyIG CTO:** Analyzing repository directory structure and mapping system elements...");
+        await telegramService.sendMessage(chatId, "🔍 Starting a system architecture mapping...");
         try {
           const analysis = await repoIntelligenceService.analyzeArchitecture();
           await telegramService.sendMessage(chatId, analysis);
@@ -402,7 +402,7 @@ export class TelegramController {
       }
 
       case "/review": {
-        await telegramService.sendMessage(chatId, "🔍 **StudyIG CTO:** Running code quality and style compliance check...");
+        await telegramService.sendMessage(chatId, "🔍 Starting a code quality and style compliance check...");
         try {
           const analysis = await repoIntelligenceService.reviewCodebase();
           await telegramService.sendMessage(chatId, analysis);
@@ -413,7 +413,7 @@ export class TelegramController {
       }
 
       case "/security": {
-        await telegramService.sendMessage(chatId, "🛡️ **Security scan started...** Please wait while I run a read-only AppSec static security scan...");
+        await telegramService.sendMessage(chatId, "🔍 Starting a full security audit...");
         try {
           const analysis = await repoIntelligenceService.analyzeSecurity();
           await telegramService.sendMessage(chatId, analysis);
@@ -424,7 +424,7 @@ export class TelegramController {
       }
 
       case "/duplicates": {
-        await telegramService.sendMessage(chatId, "🧹 **StudyIG CTO:** Auditing codebase redundancy and duplicate files...");
+        await telegramService.sendMessage(chatId, "🔍 Starting a duplicate file and codebase redundancy audit...");
         try {
           const analysis = await repoIntelligenceService.analyzeDuplicates();
           await telegramService.sendMessage(chatId, analysis);
@@ -435,7 +435,7 @@ export class TelegramController {
       }
 
       case "/dependencies": {
-        await telegramService.sendMessage(chatId, "📦 **StudyIG CTO:** Analyzing package.json dependencies and versions...");
+        await telegramService.sendMessage(chatId, "🔍 Starting a package dependency and version check...");
         try {
           const analysis = await repoIntelligenceService.analyzeDependencies();
           await telegramService.sendMessage(chatId, analysis);

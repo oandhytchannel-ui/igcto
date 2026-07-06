@@ -192,16 +192,26 @@ export class TelegramService {
       return false;
     }
 
+    // Centrally translate and replace raw exceptions/error messages to hide them from Telegram users
+    let sanitizedText = text;
+    if (text.includes("Request Entity Too Large") || text.includes("too large")) {
+      sanitizedText = "The report was too large to send in one message. I've automatically split it into multiple parts.";
+    } else if (text.includes("PGRST106") || text.includes("PGRST")) {
+      sanitizedText = "I couldn't access the project database because of a configuration issue. Please check the database configuration and try again.";
+    } else if (text.includes("503 UNAVAILABLE") || text.includes("503") || text.includes("UNAVAILABLE") || text.includes("experienced unusually high demand")) {
+      sanitizedText = "Gemini is currently experiencing high demand. I'll automatically retry a few times before asking you to try again later.";
+    }
+
     try {
-      const chunks = splitMessage(text);
-      logger.info(`Sending Telegram message to Chat ${chatId} split into ${chunks.length} chunk(s).`);
+      const chunks = splitMessage(sanitizedText);
+      logger.info(`[Telegram Send Log] Dispatching message to Chat ${chatId}. Total Chunks: ${chunks.length}`);
 
       let allSucceeded = true;
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         const cleanedChunk = cleanMarkdown(chunk);
 
-        logger.info(`Sending chunk ${i + 1}/${chunks.length} (Attempt 1: Markdown)...`);
+        logger.info(`[Telegram Send Log] Dispatching chunk ${i + 1}/${chunks.length} using Markdown parsing...`);
         const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -216,9 +226,8 @@ export class TelegramService {
           continue;
         }
 
-        // If Markdown formatting fails, fallback to plain text (using raw chunk without formatting or escapes)
         const errorDetail = await response.text();
-        logger.warn(`Telegram Markdown delivery rejected for chunk ${i + 1}/${chunks.length} (${response.status}). Retrying as plain text... Response: ${errorDetail}`);
+        logger.warn(`[Telegram Delivery Warning] Markdown parse failed for chunk ${i + 1}/${chunks.length} (${response.status}). Retrying with plain text fallback... Error detail: ${errorDetail}`);
 
         const retryResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
           method: "POST",
@@ -231,13 +240,16 @@ export class TelegramService {
 
         if (!retryResponse.ok) {
           allSucceeded = false;
-          logger.error(`Failed to send chunk ${i + 1}/${chunks.length} even as plain text.`);
+          const finalErrorDetail = await retryResponse.text();
+          logger.error(`[Telegram Delivery Failure] Failed to deliver chunk ${i + 1}/${chunks.length} to Chat ${chatId} even with plain text fallback. Error detail: ${finalErrorDetail}`);
+        } else {
+          logger.info(`[Telegram Send Log] Chunk ${i + 1}/${chunks.length} delivered successfully via plain text fallback.`);
         }
       }
 
       return allSucceeded;
     } catch (error: any) {
-      logger.error(`Error communicating with Telegram Bot API for Chat ${chatId}:`, error.message || error);
+      logger.error(`[Telegram Delivery Failure] Unexpected error in telegram communication for Chat ${chatId}:`, error.message || error);
       return false;
     }
   }

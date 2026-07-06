@@ -10,6 +10,45 @@ import { config } from "../config.js";
 
 let supabaseInstance: SupabaseClient<any, any> | null = null;
 
+function wrapQueryBuilder(qb: any, relation: string): any {
+  return new Proxy(qb, {
+    get(target, prop, receiver) {
+      if (prop === "then") {
+        const originalThen = target.then;
+        return function(onfulfilled?: any, onrejected?: any) {
+          const queryStart = Date.now();
+          return originalThen.call(target,
+            (value: any) => {
+              const duration = Date.now() - queryStart;
+              logger.info(`[Supabase Query Log] table: "${relation}" | status: SUCCESS | duration: ${duration}ms`);
+              if (onfulfilled) return onfulfilled(value);
+              return value;
+            },
+            (reason: any) => {
+              const duration = Date.now() - queryStart;
+              logger.error(`[Supabase Query Log] table: "${relation}" | status: FAILED | duration: ${duration}ms | error: ${reason?.message || reason}`);
+              if (onrejected) return onrejected(reason);
+              throw reason;
+            }
+          );
+        };
+      }
+      
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value === "function") {
+        return function(...args: any[]) {
+          const result = value.apply(target, args);
+          if (result && typeof result === "object" && typeof result.then === "function") {
+            return wrapQueryBuilder(result, relation);
+          }
+          return result;
+        };
+      }
+      return value;
+    }
+  });
+}
+
 export function getSupabaseClient(): SupabaseClient<any, any> {
   if (!supabaseInstance) {
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -23,13 +62,25 @@ export function getSupabaseClient(): SupabaseClient<any, any> {
 
     logger.info(`Initializing Supabase Client using Service Role Key (RLS bypass enabled) targeting schema "${config.supabaseSchema}"...`);
     
-    supabaseInstance = createClient(supabaseUrl, supabaseServiceKey, {
+    const client = createClient(supabaseUrl, supabaseServiceKey, {
       db: {
         schema: config.supabaseSchema,
       },
       auth: {
         persistSession: false, // For backend server usage
       },
+    });
+
+    supabaseInstance = new Proxy(client, {
+      get(target, prop, receiver) {
+        if (prop === "from") {
+          return function(relation: string) {
+            const queryBuilder = (client as any).from(relation);
+            return wrapQueryBuilder(queryBuilder, relation);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      }
     });
   }
   

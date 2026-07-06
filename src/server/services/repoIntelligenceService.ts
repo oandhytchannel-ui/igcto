@@ -93,6 +93,7 @@ export class RepoIntelligenceService {
       }
     }
 
+    const scanStart = Date.now();
     logger.info(`Executing live recursive scan on GitHub repository ${owner}/${repo} on branch [${branch}]...`);
     
     const headers: Record<string, string> = {
@@ -164,6 +165,9 @@ export class RepoIntelligenceService {
 
     // Write to memory cache fallback
     memoryCache.set(projectId, scannedFiles);
+
+    const scanDuration = Date.now() - scanStart;
+    logger.info(`[GitHub Scan Log] Completed recursive repository scan in ${scanDuration}ms.`);
 
     return {
       filesCount: scannedFiles.length,
@@ -322,11 +326,13 @@ ${JSON.stringify(dependencies, null, 2)}
 package.json devDependencies:
 ${JSON.stringify(devDependencies, null, 2)}
 
-Provide a beautiful, highly professional CTO dependency report in clear Markdown format. Specify:
-1. Direct Production Dependencies Summary
-2. Developer Tooling Summary
-3. Key Risks/Security Alerts (e.g. outdated frameworks, missing critical lockings)
-4. Key Recommendations (e.g. migrate to newer versions, delete unused tooling)`;
+Provide a beautiful, highly professional CTO dependency report in clear Markdown format. Always follow the default CTO response style:
+1. **Simple Explanation**: A warm, human-friendly explanation of our current dependency landscape, explaining what these packages do for StudyIG.
+2. **Summary**: A concise high-level summary of our direct production dependencies, dev tooling, and framework stack.
+3. **Recommendations & Risks**: Clear, actionable recommendations to improve performance, upgrade versions, or remove unused tooling, including potential security alerts or size bloat warnings.
+4. **Conclusion**: Conclude with a friendly offer to show full package.json definitions or implementation details if requested.
+
+Strictest Rule: NEVER dump raw code or configuration blocks unless explicitly requested. Speak and write conceptually and mentor the developer.`;
 
       return await geminiProvider.generateText(prompt, { temperature: 0.2 });
     } catch (error: any) {
@@ -355,11 +361,13 @@ Analyze the structural layout, folders patterns, entrypoints, and tech stack cho
 File paths:
 ${pathsSummary}
 
-Provide a structured Architectural Assessment in Markdown. Include:
-1. **Identified Tech Stack**: (Frontend libraries, Backend engine, database tools, configurations)
-2. **Structural Evaluation**: Review our separation of concerns, routing pattern, or components folder layout.
-3. **Core Recommendations**: Suggest steps to scale this directory layout or implement architectural best practices.
-4. **Interactive Component Map**: Formulate a text-based ASCII structure showing the high-level data flow.`;
+Provide a structured Architectural Assessment in Markdown. Always follow the default CTO response style:
+1. **Simple Explanation**: A warm, human-friendly overview of how the codebase is structured and how files are separated.
+2. **Summary**: A high-level architectural summary of the identified tech stack (frontend libraries, backend engine, database tools, configurations).
+3. **Recommendations & Refactoring**: Actionable recommendations to scale this directory layout, separation of concerns, or architectural design patterns, including an interactive ASCII component map.
+4. **Conclusion**: Offer to draw or show a text-based ASCII structure of specific module data flows or full implementation details if requested.
+
+Strictest Rule: NEVER dump raw code or directory structures as raw text blocks unless explicitly requested. Speak conceptually first.`;
 
       return await geminiProvider.generateText(prompt, { temperature: 0.2 });
     } catch (error: any) {
@@ -406,11 +414,13 @@ Audit for:
 Snippets:
 ${filesPayload || "No sensitive files loaded yet. Analyze based on file paths: " + files.map(f => f.path).slice(0, 50).join("\n")}
 
-Provide a formal CTO Security Audit Report in Markdown. Format with:
-1. **Executive Vulnerability Summary** (Categorize threats: High, Medium, Low)
-2. **Detailed Finding Explanations & Line References**
-3. **Remediation Plans** (Clear code refactoring examples)
-4. **General Security Hardening Guidelines**`;
+Provide a formal CTO Security Audit Report in Markdown. Always follow the default CTO response style:
+1. **Simple Explanation**: A warm, non-alarmist, human-friendly explanation of the security stance of our codebase.
+2. **Summary**: A high-level executive vulnerability summary categorizing findings (High, Medium, Low severity).
+3. **Recommendations & Remediation**: Concrete, conceptual recommendations to secure these findings and remediation guidelines.
+4. **Conclusion**: Conclude by offering to show exact code snippets, secure refactoring examples, or dependency patches if they want to see them.
+
+Strictest Rule: NEVER dump raw code blocks or vulnerable lines directly in the report unless requested. Explain the issue conceptually first.`;
 
       return await geminiProvider.generateText(prompt, { temperature: 0.2 });
     } catch (error: any) {
@@ -465,10 +475,13 @@ ${duplicateReportPayload}
 File layout tree (top files):
 ${pathList}
 
-Formulate a CTO Refactoring & Code Quality Report in Markdown focusing on dry-principles:
-1. **Identified Redundancy Hotspots**: Point out duplicate files (from the SHA list) or potential copy-paste components.
-2. **Maintenance Impact**: Explain why this structural redundancy slows down developer velocity.
-3. **Refactoring Roadmap**: Step-by-step refactoring guidelines to unify duplicate logic into generic helper methods or reusable layout widgets.`;
+Formulate a CTO Refactoring & Code Quality Report in Markdown focusing on dry-principles. Always follow the default CTO response style:
+1. **Simple Explanation**: A warm, human-friendly explanation of what dry-principles are and where we currently have structural redundancy.
+2. **Summary**: A high-level summary of the discovered redundancy hotspots (such as duplicate files, copy-paste helper methods, or similar layouts).
+3. **Recommendations & Refactoring**: Specific, actionable recommendations and a refactoring roadmap to unify duplicate logic into reusable widgets or generic helpers, explaining the impact on velocity.
+4. **Conclusion**: Conclude with a friendly offer to show full implementation details or provide the refactored code if they request it.
+
+Strictest Rule: NEVER dump raw code blocks or mock refactored code unless requested. Explain everything conceptually first.`;
 
       return await geminiProvider.generateText(prompt, { temperature: 0.2 });
     } catch (error: any) {
@@ -514,11 +527,13 @@ Audit for:
 Snippets:
 ${reviewPayload || "Analyze general structure based on file paths:\n" + files.map(f => f.path).slice(0, 50).join("\n")}
 
-Format your response as a professional, thorough CTO Code Quality Review in Markdown:
-1. **Review Score & Grade** (A to F scale based on clean coding standards)
-2. **Strengths identified** (What is built well)
-3. **Code Quality Opportunities** (Specific recommendations for refactoring)
-4. **Style Guidelines Compliance** (TypeScript type safety, logging elegance)`;
+Format your response as a professional, thorough CTO Code Quality Review in Markdown. Always follow the default CTO response style:
+1. **Simple Explanation**: A warm, encouraging, human-friendly explanation of our overall code quality and styling conventions.
+2. **Summary**: A high-level summary including a general review score or grade (e.g. A to F) and the core strengths identified.
+3. **Recommendations & Opportunities**: Actionable code quality opportunities and specific, conceptual guidelines to improve type safety, DRY compliance, or logging.
+4. **Conclusion**: Conclude by offering to show exact code refactor examples, type declarations, or clean error-handling snippets if they ask.
+
+Strictest Rule: NEVER dump raw code blocks or complete class refactors unless requested. Keep code to a minimum or explain conceptually first.`;
 
       return await geminiProvider.generateText(prompt, { temperature: 0.2 });
     } catch (error: any) {
@@ -556,7 +571,13 @@ File paths list:
 ${filePathsSummary}
 ${directContent}
 
-Provide a comprehensive, elite architectural answer in Markdown. Keep it practical, clear, and focused on enabling developers to build successfully.`;
+Provide a comprehensive, elite architectural answer in Markdown. Always follow the default CTO response style:
+1. **Simple Explanation**: A warm, clear, human-friendly explanation of the topic, component, or file.
+2. **Summary**: A high-level summary of how it fits into the broader StudyIG application architecture and data flow.
+3. **Recommendations**: Helpful CTO-level recommendations, tips, or guidelines on how to interact with or extend this module successfully.
+4. **Conclusion**: Offer to show specific code snippets, file contents, or setup guides if they request them.
+
+Strictest Rule: NEVER dump raw code or whole file contents unless requested. Keep explanations conceptual and mentor the developer.`;
 
       return await geminiProvider.generateText(prompt, { temperature: 0.2 });
     } catch (error: any) {
