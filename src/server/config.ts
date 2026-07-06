@@ -20,6 +20,8 @@ export interface AppConfig {
   hasTelegramToken: boolean;
   hasGithubToken: boolean;
   appUrl: string;
+  hasStudyigSupabaseUrl: boolean;
+  hasStudyigSupabaseKey: boolean;
 }
 
 export const config: AppConfig = {
@@ -32,6 +34,8 @@ export const config: AppConfig = {
   hasTelegramToken: !!process.env.TELEGRAM_BOT_TOKEN,
   hasGithubToken: !!process.env.GITHUB_TOKEN,
   appUrl: process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"),
+  hasStudyigSupabaseUrl: !!process.env.STUDYIG_SUPABASE_URL,
+  hasStudyigSupabaseKey: !!process.env.STUDYIG_SUPABASE_SERVICE_ROLE_KEY,
 };
 
 /**
@@ -59,6 +63,10 @@ export function getDiagnosticsReport() {
       github: {
         status: config.hasGithubToken ? "configured" : "missing",
         description: "GitHub API Authenticator (Required for reading repositories)",
+      },
+      studyigSupabase: {
+        status: (config.hasStudyigSupabaseUrl && config.hasStudyigSupabaseKey) ? "configured" : "missing",
+        description: "StudyIG Production Database Client (Required for DB Inspection)",
       },
     },
     appUrl: config.appUrl,

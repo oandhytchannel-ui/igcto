@@ -11,6 +11,7 @@ import { telegramService } from "../services/telegramService.js";
 import { memoryService } from "../services/memoryService.js";
 import { geminiService } from "../services/geminiService.js";
 import { repoIntelligenceService } from "../services/repoIntelligenceService.js";
+import { intentRouterService } from "../services/intentRouterService.js";
 import { getDiagnosticsReport } from "../config.js";
 
 // Project Management Services & Repositories
@@ -22,6 +23,7 @@ import { decisionService } from "../services/decisionService.js";
 import { releaseService } from "../services/releaseService.js";
 import { priorityService } from "../services/priorityService.js";
 import { realitySyncService } from "../services/realitySyncService.js";
+import { studyigDbService } from "../services/studyigDbService.js";
 import { technicalDebtRepository } from "../repositories/technicalDebtRepository.js";
 import { epicRepository } from "../repositories/epicRepository.js";
 import { milestoneRepository } from "../repositories/milestoneRepository.js";
@@ -79,13 +81,25 @@ export class TelegramController {
       // Telegram does not have an elegant "typing" event without complex long-running connections,
       // but we can proceed straight to text generation and send the reply.
       try {
-        // Step C: Route the message and history context through Gemini
-        const reply = await geminiService.generateReply(messageText, recentHistory);
+        // Step C: Run Intent-Based Analysis
+        logger.info(`[Telegram Controller] Routing user message through Intent Router...`);
+        const intent = await intentRouterService.analyzeIntent(messageText);
+        
+        // Step D: Collect evidence based on detected intent
+        logger.info(`[Telegram Controller] Collecting evidence for detected systems...`);
+        const evidenceResult = await intentRouterService.collectEvidence(intent, project.id!);
 
-        // Step D: Persist the assistant's response
+        // Check if verbose/debug mode is requested via user message flag
+        const isVerbose = messageText.toLowerCase().includes("-v") || messageText.toLowerCase().includes("--verbose");
+
+        // Step E: Route the message, history context, and evidence through Gemini for reasoning
+        logger.info(`[Telegram Controller] Generating evidence-supported reply...`);
+        const reply = await geminiService.generateReplyWithEvidence(messageText, recentHistory, evidenceResult, isVerbose);
+
+        // Step F: Persist the assistant's response
         await memoryService.storeMessage(conversation.id!, project.id!, "assistant", reply);
 
-        // Step E: Send the response back to Telegram
+        // Step G: Send the response back to Telegram
         await telegramService.sendMessage(chatId, reply);
       } catch (geminiError: any) {
         logger.error(`Gemini generation failed for Chat ${chatId}:`, geminiError.message || geminiError);
@@ -121,45 +135,45 @@ export class TelegramController {
     switch (primaryCommand) {
       case "/start": {
         const welcomeText = `👋 Hello! I am the **StudyIG CTO Assistant**.\n\n` +
-          `I am your elite system architect and AI Chief Technology Officer, configured with read-only repository intelligence to guide database migrations, trace files, diagnose setups, and audit code.\n\n` +
-          `⚙️ **Core Settings:**\n` +
-          `• Use \`/scan\` to map out your files list.\n` +
-          `• Use \`/repo\` to view current repository configuration.\n\n` +
-          `🛠️ **Full Commands Guide:** Type \`/help\` for the complete suite of CTO features.`;
+          `I am your senior AI Chief Technology Officer, configured with advanced **Intent-Based Conversational Intelligence** and real-time grounding in your repository and database systems.\n\n` +
+          `💬 **How to interact with me:**\n` +
+          `Simply ask me your engineering questions in natural language, and I will automatically inspect files, database schemas, and planning records to give you grounded evidence-based answers. E.g.:\n` +
+          `• _"Why are students unable to join courses?"_\n` +
+          `• _"Audit my authentication system and RLS rules"_\n` +
+          `• _"Are there any open bugs or roadmap milestones?"_\n\n` +
+          `⚙️ **Operational Commands:**\n` +
+          `• \`/scan\` [force] - Map and cache your repository's structure.\n` +
+          `• \`/status\` - Verify all backend integration and check system health.\n` +
+          `• \`/clear\` - Reset conversation memory context.\n` +
+          `• \`/help\` - View full command manual and optional shortcuts.`;
         
         await telegramService.sendMessage(chatId, welcomeText);
         break;
       }
 
       case "/help": {
-        const helpText = `🛠️ **StudyIG CTO Assistant - Command Manual**\n\n` +
-          `I have full read-only awareness of your GitHub repository. Here is the operational command list:\n\n` +
-          `📂 **Codebase Navigation:**\n` +
+        const helpText = `🛠️ **StudyIG CTO Assistant - System Manual**\n\n` +
+          `I have full read-only awareness of your GitHub repository, live StudyIG production database, and CTO database. You can chat with me naturally or use operational commands.\n\n` +
+          `⚙️ **Primary Operational Commands:**\n` +
+          `• \`/help\` - View this help and system manual.\n` +
+          `• \`/status\` - Run system diagnostics & compile Weekly CTO Report.\n` +
           `• \`/scan\` [force] - Scans and caches files list (add 'force' to refresh cache).\n` +
+          `• \`/clear\` - Clears conversation context thread.\n\n` +
+          `📌 **Optional Command Shortcuts:**\n` +
           `• \`/repo\` - Shows configured repository parameters and files count.\n` +
           `• \`/search <query>\` - Searches matching terms inside the codebase.\n` +
           `• \`/file <path>\` - Reads and displays content of a specific file.\n` +
-          `• \`/explain <topic/path>\` - Explains an architectural concept or file.\n\n` +
-          `🧠 **CTO Audits & Reviews:**\n` +
+          `• \`/explain <topic/path>\` - Explains an architectural concept or file.\n` +
           `• \`/architecture\` - Analyzes directory layouts and displays structure.\n` +
           `• \`/review\` - Assesses style, static types, and coding hygiene.\n` +
           `• \`/security\` - Scans for key leaks or injection loopholes.\n` +
-          `• \`/duplicates\` - Scans for redundancy or duplicate helper files.\n` +
-          `• \`/dependencies\` - Evaluates package dependencies and versions.\n\n` +
-          `📈 **Project Planning & Management:**\n` +
-          `• \`/verify\` - Reconciles CTO planning database with actual repository codebase.\n` +
+          `• \`/studyig schema\` - Maps every database table and relation.\n` +
+          `• \`/studyig db\` - Displays database health status.\n` +
+          `• \`/studyig rls\` - Audits Row Level Security (RLS) policies.\n` +
+          `• \`/studyig audit\` - Audits alignment of code queries vs. schemas.\n` +
           `• \`/roadmap\` [generate] - View roadmap or trigger AI compiler.\n` +
-          `• \`/feature\` <title> | <desc> - Plan feature with dynamic spec checklist.\n` +
-          `• \`/task\` [create <title> | <desc> / status <id> <state>] - Manage tasks.\n` +
-          `• \`/bug\` [create <title> | <desc> / status <id> <state>] - Bug reports & file linking.\n` +
-          `• \`/priority\` - Priority Engine action plan ranking.\n` +
-          `• \`/release\` [create <v> | <t> / notes <v>] - Releases and AI changelogs.\n` +
-          `• \`/decision\` [create <title> | <context>] - Architectural Decision Records (ADR).\n` +
           `• \`/todo\` - Lists outstanding/incomplete tasks.\n` +
-          `• \`/debt\` [create <t> | <d> | <r>] - Log technical debt items.\n\n` +
-          `📌 **General Commands:**\n` +
-          `• \`/status\` - Verifies integrations & compiles Weekly CTO Report.\n` +
-          `• \`/clear\` - Clears conversation context thread.`;
+          `• \`/bug\` [create <t> | <d>] - Manage project bugs.`;
 
         await telegramService.sendMessage(chatId, helpText);
         break;
@@ -441,6 +455,59 @@ export class TelegramController {
           await telegramService.sendMessage(chatId, analysis);
         } catch (err: any) {
           await telegramService.sendMessage(chatId, `❌ **Dependency Audit Failed:** ${err.message || "Unknown error"}`);
+        }
+        break;
+      }
+
+      case "/studyig": {
+        const subCommand = commandArg.toLowerCase();
+        if (subCommand === "schema") {
+          await telegramService.sendMessage(chatId, "🔍 Generating professional StudyIG Database Schema & Relationships Map...");
+          try {
+            const report = await studyigDbService.generateSchemaReport();
+            await telegramService.sendMessage(chatId, report);
+          } catch (err: any) {
+            await telegramService.sendMessage(chatId, `❌ **Database Schema Mapping Failed:** ${err.message || "Unknown error"}`);
+          }
+        } else if (subCommand === "db") {
+          await telegramService.sendMessage(chatId, "🔍 Diagnostics started. Auditing StudyIG database health & connection parameters...");
+          try {
+            const report = await studyigDbService.generateHealthReport();
+            await telegramService.sendMessage(chatId, report);
+          } catch (err: any) {
+            await telegramService.sendMessage(chatId, `❌ **Database Health Audit Failed:** ${err.message || "Unknown error"}`);
+          }
+        } else if (subCommand === "rls") {
+          await telegramService.sendMessage(chatId, "🔍 Initiating thorough Row Level Security (RLS) security compliance audit...");
+          try {
+            const report = await studyigDbService.generateRlsAudit();
+            await telegramService.sendMessage(chatId, report);
+          } catch (err: any) {
+            await telegramService.sendMessage(chatId, `❌ **RLS Security Audit Failed:** ${err.message || "Unknown error"}`);
+          }
+        } else if (subCommand === "audit") {
+          await telegramService.sendMessage(chatId, "🔍 Compiling complete alignment audit (codebase queries vs database schema)...");
+          try {
+            const report = await studyigDbService.generateEngineeringAudit();
+            await telegramService.sendMessage(chatId, report);
+          } catch (err: any) {
+            await telegramService.sendMessage(chatId, `❌ **Engineering Audit Failed:** ${err.message || "Unknown error"}`);
+          }
+        } else if (subCommand === "sql") {
+          await telegramService.sendMessage(chatId, "🔍 Compiling idempotent SQL fixes migration script...");
+          try {
+            const report = await studyigDbService.generateSqlFixes();
+            await telegramService.sendMessage(chatId, report);
+          } catch (err: any) {
+            await telegramService.sendMessage(chatId, `❌ **SQL Fixes Generation Failed:** ${err.message || "Unknown error"}`);
+          }
+        } else {
+          await telegramService.sendMessage(chatId, "⚠️ **Syntax Error:** Use:\n" +
+            "• `/studyig schema` - Show database tables and relationships\n" +
+            "• `/studyig db` - Show connection health & status\n" +
+            "• `/studyig rls` - Audit Row Level Security policies\n" +
+            "• `/studyig audit` - Run code & schema mismatch alignment check\n" +
+            "• `/studyig sql` - Compile idempotent SQL migration scripts");
         }
         break;
       }

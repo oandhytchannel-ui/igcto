@@ -7,6 +7,7 @@
 
 import { geminiProvider } from "./geminiProvider.js";
 import { AssistantMemory } from "../repositories/projectRepository.js";
+import { EvidenceCollectionResult } from "./intentRouterService.js";
 import { logger } from "../lib/logger.js";
 
 export class GeminiService {
@@ -31,11 +32,6 @@ Formulating Responses:
 - Format your answers elegantly in clean Markdown.
 - Use precise display-oriented headings and spacing.
 - Be decisive, mentoring, practical, and grounded in the current codebase.
-- **DEFAULT RESPONSE STYLE**: You MUST always follow this structured style for your responses:
-  1. **Simple Explanation**: Start with a human-friendly, practical, non-technical overview of findings or context.
-  2. **Summary**: Provide a clear, high-level, bulleted summary.
-  3. **Recommendations**: Outline specific, actionable, step-by-step recommendations.
-  4. **Conclusion**: Conclude by offering to show specific code implementation details or setup files *if explicitly requested* (e.g. "If you'd like, I can provide the implementation code or detailed configuration files to help you set this up.").
 - **STRICT CODE LIMITATION**: Never dump raw code or implementation snippets unless explicitly requested. Describe changes conceptually first.`;
 
   /**
@@ -69,6 +65,101 @@ Formulating Responses:
       return reply;
     } catch (error: any) {
       logger.error("GeminiService reply generation failed:", error.message || error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generates an engineering reply based on evidence collected from the Intent Router and active inspections.
+   */
+  async generateReplyWithEvidence(
+    userMessage: string,
+    history: AssistantMemory[],
+    evidenceResult: EvidenceCollectionResult,
+    isVerbose: boolean
+  ): Promise<string> {
+    try {
+      logger.info("Assembling evidence-grounded structured prompt for GeminiService...");
+
+      // 1. Build the full chat transcript from history
+      let conversationTranscript = "";
+      for (const msg of history) {
+        const roleLabel = msg.role === "user" ? "Developer" : msg.role === "system" ? "System" : "StudyIG CTO";
+        conversationTranscript += `[${roleLabel}]: ${msg.content}\n\n`;
+      }
+
+      // Add the latest user input to the transcript
+      conversationTranscript += `[Developer]: ${userMessage}\n\n[StudyIG CTO]:`;
+
+      // 2. Format deterministic evidence chunks
+      const evidenceListText = evidenceResult.evidenceUsed.map(item => `✓ ${item}`).join("\n");
+      const unavailableListText = evidenceResult.unavailable.map(item => `• ${item}`).join("\n");
+      const confidenceBlockText = `**${evidenceResult.confidenceLevel} Confidence**\n${evidenceResult.confidenceJustification}`;
+
+      // 3. Construct an augmented system prompt integrating the grounded evidence and strict layout constraint
+      const augmentedPrompt = `
+${this.systemInstruction}
+
+=========================================
+🚨 [CRITICAL GROUND TRUTH EVIDENCE] 🚨
+You MUST strictly base your engineering answer on the live evidence retrieved below. Do NOT make assumptions, guess, or hallucinate components, columns, or files.
+If a detail or column is missing or unverified, explicitly say "Unknown — could not verify from the repository or database" or "Unable to verify from available project data."
+=========================================
+
+${evidenceResult.evidenceText}
+
+=========================================
+🚨 [STRICT SECURITY CONTROLS] 🚨
+- Secrets, credentials, keys, or raw configurations MUST NEVER be exposed in your response. Redact any mentioned secrets.
+- SQL queries and database commands must never execute automatically. All database recommendations must be purely read-only advisory.
+- Explicit approval from the developer is required for any system changes or destructive actions.
+=========================================
+
+🚨 [STRICT RESPONDING LAYOUT REQUIREMENT] 🚨
+Your final response MUST follow exactly this markdown header structure:
+
+### Summary
+[Brief, high-level, human-friendly summary in plain English]
+
+### Evidence Used
+${evidenceListText}
+${unavailableListText}
+
+### Confidence Report
+${confidenceBlockText}
+
+### Root Cause
+[An objective, evidence-supported analysis of the underlying root cause of the issue. If unavailable, state "Unable to verify from available project data." Do not guess.]
+
+### Impact
+[Analysis of the technical or business impact of this issue in plain English]
+
+### Recommendation
+[Step-by-step actionable recommendation to resolve or verify. Conceptual and logical explanations only; do NOT output source code or SQL unless explicitly requested in the latest message.]
+
+### Next Steps
+[Next troubleshooting or verification instructions]
+
+---
+
+--- Conversation History ---
+
+${conversationTranscript}
+`;
+
+      logger.info("Invoking Gemini provider generateText with structured format constraints...");
+      let reply = await geminiProvider.generateText(augmentedPrompt, {
+        temperature: 0.1, // Minimum temperature for highly deterministic, evidence-grounded outputs
+      });
+
+      // 4. If verbose/debug mode is active, append the Execution Plan log nicely
+      if (isVerbose) {
+        reply += `\n\n---\n\n<details>\n<summary>🛠️ Verbose System Execution Plan</summary>\n\n\`\`\`\n${evidenceResult.executionPlanLog}\n\`\`\`\n</details>`;
+      }
+
+      return reply;
+    } catch (error: any) {
+      logger.error("GeminiService reply generation with evidence failed:", error.message || error);
       throw error;
     }
   }
