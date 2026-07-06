@@ -8,6 +8,131 @@
 import { logger } from "../lib/logger.js";
 import { config } from "../config.js";
 
+/**
+ * Splits a long text into multiple chunks safely under the limit.
+ * Keeps lines together and handles code blocks across chunks.
+ */
+function splitMessage(text: string, limit = 3500): string[] {
+  if (text.length <= limit) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  const lines = text.split("\n");
+  let currentChunk: string[] = [];
+  let currentLength = 0;
+  let inCodeBlock = false;
+  let codeBlockLanguage = "";
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isCodeBlockDelimiter = line.trim().startsWith("```");
+    const lineLengthWithNewline = line.length + (currentChunk.length > 0 ? 1 : 0);
+
+    if (currentLength + lineLengthWithNewline > limit) {
+      if (currentChunk.length > 0) {
+        if (inCodeBlock) {
+          currentChunk.push("```");
+        }
+        chunks.push(currentChunk.join("\n"));
+        currentChunk = [];
+        currentLength = 0;
+
+        if (inCodeBlock) {
+          currentChunk.push("```" + codeBlockLanguage);
+          currentLength = currentChunk[0].length;
+        }
+      } else {
+        // Force split extremely long line
+        let remainingLine = line;
+        while (remainingLine.length > 0) {
+          const sliceLen = Math.min(remainingLine.length, limit - (inCodeBlock ? 10 : 0));
+          const slice = remainingLine.slice(0, sliceLen);
+          remainingLine = remainingLine.slice(sliceLen);
+
+          if (inCodeBlock) {
+            chunks.push("```" + codeBlockLanguage + "\n" + slice + "\n```");
+          } else {
+            chunks.push(slice);
+          }
+        }
+        continue;
+      }
+    }
+
+    if (isCodeBlockDelimiter) {
+      inCodeBlock = !inCodeBlock;
+      if (inCodeBlock) {
+        codeBlockLanguage = line.trim().slice(3).trim();
+      } else {
+        codeBlockLanguage = "";
+      }
+    }
+
+    currentChunk.push(line);
+    currentLength += lineLengthWithNewline;
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk.join("\n"));
+  }
+
+  return chunks;
+}
+
+/**
+ * Safely cleans and escapes markdown characters outside of code blocks.
+ * Prevents Telegram parse failures due to unclosed symbols or snake_case underscores.
+ */
+function cleanMarkdown(text: string): string {
+  // Split by code blocks first to protect them
+  const parts = text.split(/(```[\s\S]*?```)/g);
+
+  return parts.map((part, index) => {
+    // If it's a code block, keep as is
+    if (index % 2 === 1) {
+      return part;
+    }
+
+    // Split by inline code to protect them
+    const subParts = part.split(/(`[^`\n]+`)/g);
+    return subParts.map((subPart, subIndex) => {
+      // If it's inline code, keep as is
+      if (subIndex % 2 === 1) {
+        return subPart;
+      }
+
+      let cleaned = subPart;
+
+      // Escape underscores that are surrounded by word characters (snake_case)
+      cleaned = cleaned.replace(/(\w)_(\w)/g, "$1\\_$2");
+
+      const protectedBlocks: string[] = [];
+      const placeholder = (t: string) => {
+        protectedBlocks.push(t);
+        return `\x00${protectedBlocks.length - 1}\x00`;
+      };
+
+      // Protect markdown links
+      cleaned = cleaned.replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/g, (match) => placeholder(match));
+
+      // Protect bold formatting
+      cleaned = cleaned.replace(/\*\*([^\*\s][^\*]*?[^\*\s]|[^\*\s])\*\*/g, (match) => placeholder(match));
+
+      // Protect italic formatting
+      cleaned = cleaned.replace(/_([^_ \t\r\n][^_]*?[^_ \t\r\n]|[^_ \t\r\n])_/g, (match) => placeholder(match));
+
+      // Escape remaining loose special markdown chars
+      cleaned = cleaned.replace(/[*_\[\]]/g, "\\$&");
+
+      // Restore protected formatting
+      cleaned = cleaned.replace(/\x00(\d+)\x00/g, (_, id) => protectedBlocks[parseInt(id, 10)]);
+
+      return cleaned;
+    }).join("");
+  }).join("");
+}
+
 export class TelegramService {
   isConfigured(): boolean {
     return !!process.env.TELEGRAM_BOT_TOKEN;
@@ -57,7 +182,8 @@ export class TelegramService {
 
   /**
    * Sends a message to a specific Telegram chat.
-   * Employs a fallback retry without "parse_mode" in case custom formatting fails to render.
+   * Splits long responses, cleans and escapes markdown,
+   * and employs a fallback retry without "parse_mode" in case formatting fails.
    */
   async sendMessage(chatId: string | number, text: string): Promise<boolean> {
     const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -67,35 +193,49 @@ export class TelegramService {
     }
 
     try {
-      logger.info(`Sending Telegram message to Chat ${chatId} (Attempt 1: Markdown)...`);
-      const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId.toString(),
-          text,
-          parse_mode: "Markdown"
-        })
-      });
+      const chunks = splitMessage(text);
+      logger.info(`Sending Telegram message to Chat ${chatId} split into ${chunks.length} chunk(s).`);
 
-      if (response.ok) {
-        return true;
+      let allSucceeded = true;
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        const cleanedChunk = cleanMarkdown(chunk);
+
+        logger.info(`Sending chunk ${i + 1}/${chunks.length} (Attempt 1: Markdown)...`);
+        const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId.toString(),
+            text: cleanedChunk,
+            parse_mode: "Markdown"
+          })
+        });
+
+        if (response.ok) {
+          continue;
+        }
+
+        // If Markdown formatting fails, fallback to plain text (using raw chunk without formatting or escapes)
+        const errorDetail = await response.text();
+        logger.warn(`Telegram Markdown delivery rejected for chunk ${i + 1}/${chunks.length} (${response.status}). Retrying as plain text... Response: ${errorDetail}`);
+
+        const retryResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId.toString(),
+            text: chunk
+          })
+        });
+
+        if (!retryResponse.ok) {
+          allSucceeded = false;
+          logger.error(`Failed to send chunk ${i + 1}/${chunks.length} even as plain text.`);
+        }
       }
 
-      // If Markdown formatting fails (often due to mismatched asterisks/backticks), fallback to plain text
-      const errorDetail = await response.text();
-      logger.warn(`Telegram Markdown delivery rejected (${response.status}). Retrying as plain text... Response: ${errorDetail}`);
-
-      const retryResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId.toString(),
-          text
-        })
-      });
-
-      return retryResponse.ok;
+      return allSucceeded;
     } catch (error: any) {
       logger.error(`Error communicating with Telegram Bot API for Chat ${chatId}:`, error.message || error);
       return false;

@@ -413,7 +413,7 @@ export class TelegramController {
       }
 
       case "/security": {
-        await telegramService.sendMessage(chatId, "🛡️ **StudyIG CTO:** Running read-only AppSec static security scan...");
+        await telegramService.sendMessage(chatId, "🛡️ **Security scan started...** Please wait while I run a read-only AppSec static security scan...");
         try {
           const analysis = await repoIntelligenceService.analyzeSecurity();
           await telegramService.sendMessage(chatId, analysis);
